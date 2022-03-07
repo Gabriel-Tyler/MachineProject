@@ -14,7 +14,7 @@ struct FetchOut
     // We can use this to debug our code.
     // FetchOut fo = { 0xdeadbeef };
     // cout << fo << '\n';
-    friend std::ostream &operator<<(std::ostream &out, const FetchOut &fo) 
+    friend std::ostream& operator<<(std::ostream& out, const FetchOut& fo) 
     {
         std::ostringstream sout;
         sout << "0x" << std::hex << std::setfill('0') << std::right << std::setw(8) << fo.instruction;
@@ -55,14 +55,14 @@ private:
     template <typename T>
     void memory_write(int64_t address, T value)
     {
-        *reinterpret_cast<T *>(_memory + address) = value;
+        *reinterpret_cast<T*>(_memory + address) = value;
     }
 
 public:
-    Machine(char *mem, int size)
+    Machine(char* mem, int size)
+        : _memory(mem), _memorySize(size), _pc(0)
     {
-        _memory = mem;
-        _memorySize = size;
+        // set the stack pointer to be at the end of memory
         set_xreg(2, _memorySize);
     }
 
@@ -82,15 +82,16 @@ public:
     }
     void set_xreg(int which, int64_t value)
     {
-        which &= 0x1f;
+        which &= 0x1f; // Make sure the register number is 0 - 31
         _regs[which] = value;
     }
 
     void fetch()
     {
-        // Write fetch() here.
+        // read the instruction at the program counter memory address
+        _fo.instruction = memory_read<uint32_t>(_pc);
     }
-    FetchOut &debug_fetch_out()
+    FetchOut& debug_fetch_out()
     {
         return _fo;
     }
@@ -140,7 +141,17 @@ int main(int argc, char* argv[])
     char* memory = new char[MEM_SIZE]; 
     fin.read(memory, fileSize);
 
+    Machine coolMachine(memory, fileSize);
+    while (coolMachine.get_pc() < fileSize)
+    {
+        coolMachine.fetch();
+        std::cout << coolMachine.debug_fetch_out() << '\n';
+        coolMachine.set_pc(coolMachine.get_pc() + 4);
+    }
+
     // cleanup
     delete[] memory;
     fin.close();
+
+    return 0;
 }
