@@ -1,6 +1,7 @@
 // Gabriel Tyler
 // 03/07/22
-// 
+// Read from a binary file and store intructions in memory allocated on the heap
+// The Machine class manages and fetches the instructions from memory
 
 #include <iostream>
 #include <cstdint>
@@ -30,7 +31,6 @@ class Machine
 {
 public:
     // constants
-    static const int MEM_SIZE = 1 << 18;
     static const int NUM_REGS = 32;
 
 private:
@@ -123,8 +123,11 @@ int main(int argc, char* argv[])
     int fileSize = fin.tellg();
     std::cout << "fileSize = " << fileSize << '\n';
 
+    // the size of the memory buffer, 2^18
+    constexpr int MEM_SIZE = 1 << 18;
+
     // make sure the file size doesn't exceed the memory size
-    if (fileSize > Machine::MEM_SIZE)
+    if (fileSize > MEM_SIZE)
     {
         std::cerr << "File is too large\n";
         return 1;
@@ -141,11 +144,11 @@ int main(int argc, char* argv[])
     fin.seekg(0, fin.beg);
 
     // read bytes from file into memory
-    char* memory = new char[Machine::MEM_SIZE]; 
+    char* memory = new char[MEM_SIZE]; 
     fin.read(memory, fileSize);
 
     // create the Machine using the allocated memory and debug
-    Machine coolMachine(memory, Machine::MEM_SIZE);
+    Machine coolMachine(memory, MEM_SIZE);
     while (coolMachine.get_pc() < fileSize)
     {
         coolMachine.fetch();
