@@ -1,3 +1,7 @@
+// Gabriel Tyler
+// 03/07/22
+// 
+
 #include <iostream>
 #include <cstdint>
 #include <fstream>
@@ -119,9 +123,8 @@ int main(int argc, char* argv[])
     int fileSize = fin.tellg();
     std::cout << "fileSize = " << fileSize << '\n';
 
-    // 2^18 = 262144
-    const int MEM_SIZE = 1 << 18;
-    if (fileSize > MEM_SIZE)
+    // make sure the file size doesn't exceed the memory size
+    if (fileSize > Machine::MEM_SIZE)
     {
         std::cerr << "File is too large\n";
         return 1;
@@ -138,10 +141,11 @@ int main(int argc, char* argv[])
     fin.seekg(0, fin.beg);
 
     // read bytes from file into memory
-    char* memory = new char[MEM_SIZE]; 
+    char* memory = new char[Machine::MEM_SIZE]; 
     fin.read(memory, fileSize);
 
-    Machine coolMachine(memory, fileSize);
+    // create the Machine using the allocated memory and debug
+    Machine coolMachine(memory, Machine::MEM_SIZE);
     while (coolMachine.get_pc() < fileSize)
     {
         coolMachine.fetch();
