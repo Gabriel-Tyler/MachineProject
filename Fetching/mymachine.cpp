@@ -6,6 +6,7 @@
 
 int main(int argc, char* argv[])
 {
+    // check if a file name is provided
     if (argc != 2) 
     {
         std::cerr << "Provide a file name\n";
@@ -26,7 +27,8 @@ int main(int argc, char* argv[])
     std::cout << "fileSize = " << fileSize << '\n';
 
     // 2^18 = 262144
-    if (fileSize > 262144)
+    const int MEM_SIZE = 1 << 18;
+    if (fileSize > MEM_SIZE)
     {
         std::cerr << "File is too large\n";
         return 1;
@@ -43,7 +45,7 @@ int main(int argc, char* argv[])
     fin.seekg(0, fin.beg);
 
     // read bytes from file into memory
-    char* memory = new char[262144]; // 2^18 = 262144
+    char* memory = new char[MEM_SIZE]; 
     fin.read(memory, fileSize);
 
     // cleanup
