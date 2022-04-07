@@ -9,8 +9,6 @@
 #include <sstream>
 #include <iomanip>
 
-// g++ -Wall -Wextra -O0 -o mymachine mymachine.cpp
-
 struct FetchOut 
 {
     uint32_t instruction;
