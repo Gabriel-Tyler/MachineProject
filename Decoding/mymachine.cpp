@@ -9,6 +9,8 @@
 #include <sstream>
 #include <iomanip>
 
+// fix the decoding, offset is calculated wrong and values are in the wrong place
+
 using u8  = std::uint_fast8_t;
 using i8  = std::int_fast8_t;
 using u32 = std::uint_fast32_t;
@@ -76,6 +78,20 @@ private:
     FetchOut  _fo; // Result of the fetch() method.
     DecodeOut _do; // Result of the decode() method
 
+public:
+    Machine(char* mem, int size);
+
+    i64 GetPC() const;
+    void SetPC(i64 to);
+
+    i64 GetXReg(i32 which) const;
+    void SetXReg(i32 which, i64 value);
+
+    void Fetch();
+    void Decode();
+    FetchOut& DebugFetchOut();
+    DecodeOut& DebugDecodeOut();
+
 private:
     // Read from the internal memory
     // Usage:
@@ -99,23 +115,9 @@ private:
     void DecodeB();
     void DecodeU();
     void DecodeJ();
-
-public:
-    Machine(char* mem, int size);
-
-    i64 GetPC() const;
-    void SetPC(i64 to);
-
-    i64 GetXReg(i32 which) const;
-    void SetXReg(i32 which, i64 value);
-
-    void Fetch();
-    void Decode();
-    FetchOut& DebugFetchOut();
-    DecodeOut& DebugDecodeOut();
 };
 
-std::ostream& operator<<(std::ostream& out, const Machine::FetchOut& fo) 
+std::ostream& operator<<(std::ostream& out, const Machine::FetchOut&  fo) 
 {
     std::ostringstream sout;
     sout << "0x" << std::hex << std::setfill('0') << std::right << std::setw(8) << fo.instruction;
@@ -180,94 +182,6 @@ std::ostream& operator<<(std::ostream& out, const Machine::DecodeOut& dec)
     return out << sout.str();
 }
 
-template <typename T>
-T Machine::MemoryRead(i64 address) const
-{
-    return *reinterpret_cast<T*>(_memory + address);
-}
-
-template <typename T>
-void Machine::MemoryWrite(i64 address, T value)
-{
-    *reinterpret_cast<T*>(_memory + address) = value;
-}
-
-i64 Machine::SignExtend(u32 value, u32 index) 
-{
-    if ((value >> index) & 1) 
-    {
-        // Sign bit is 1
-        return value | (-1u << index);
-    }
-    else 
-    {
-        // Sign bit is 0
-        return value & ~(-1u << index);
-    }  
-}
-
-void Machine::DecodeR()
-{
-    _do.rd        = (_fo.instruction >> 7) & 0x1f;
-    _do.funct3    = (_fo.instruction >> 12) & 0b111;
-    _do.funct7    = (_fo.instruction >> 25) & 0b111'1111;
-    _do.offset    = 0ll;
-    _do.left_val  = GetXReg(_fo.instruction >> 15);
-    _do.right_val = GetXReg(_fo.instruction >> 20);
-}
-void Machine::DecodeI()
-{
-    _do.rd        = (_fo.instruction >> 7) & 0x1f;
-    _do.funct3    = (_fo.instruction >> 12) & 0x7;
-    _do.funct7    = 0;
-    _do.offset    = SignExtend((_fo.instruction >> 20), 11u);
-    _do.left_val  = GetXReg(_fo.instruction >> 15);
-    _do.right_val = 0ll;
-}
-void Machine::DecodeS()
-{
-    _do.rd        = 0;
-    _do.funct3    = (_fo.instruction >> 12) & 0b111;
-    _do.funct7    = 0;
-    _do.offset    = SignExtend((( _fo.instruction >> 7)  & 0x1f) |
-                                (((_fo.instruction >> 25) & 0x7f) << 5), 11u);
-    _do.left_val  = GetXReg(_fo.instruction >> 15);
-    _do.right_val = GetXReg(_fo.instruction >> 20);
-}
-void Machine::DecodeB()
-{
-    _do.rd        = 0;
-    _do.funct3    = (_fo.instruction >> 12) & 0b111;
-    _do.funct7    = 0;
-    _do.offset    = SignExtend((((_fo.instruction >> 31) & 0x1)  << 12) |
-                                (((_fo.instruction >> 25) & 0x3f) << 5)  |
-                                (((_fo.instruction >> 8)  & 0xf)  << 1)  | 
-                                (((_fo.instruction >> 7)  & 0x1)  << 11), 11u);
-    _do.left_val  = GetXReg(_fo.instruction >> 15); // get_xreg truncates for us
-    _do.right_val = GetXReg(_fo.instruction >> 20);
-}
-void Machine::DecodeU()
-{
-    _do.rd        = (_fo.instruction >> 7) & 0x1f;
-    _do.funct3    = 0;
-    _do.funct7    = 0;
-    _do.offset    = SignExtend(((_fo.instruction >> 12) & 0xf'ffff), 19u);
-    _do.left_val  = 0ll;
-    _do.right_val = 0ll;
-}
-void Machine::DecodeJ()
-{
-    _do.rd        = (_fo.instruction >> 7) & 0x1f;
-    _do.funct3    = 0;
-    _do.funct7    = 0;
-    _do.offset    = SignExtend((((_fo.instruction >> 31) & 0x1)  << 19) |
-                                (( _fo.instruction >> 21) & 0x3ff)       |
-                                (((_fo.instruction >> 20) & 0x1)  << 10) |
-                                (((_fo.instruction >> 12) & 0xff) << 11), 19);
-    _do.left_val  = 0ll;
-    _do.right_val = 0ll;
-}
-
 Machine::Machine(char* mem, int size)
     : _memory(mem), _memorySize(size), _pc(0)
 {
@@ -284,7 +198,7 @@ void Machine::SetPC(i64 to)
     _pc = to;
 }
 
-i64 Machine::GetXReg(i32 which) const
+i64  Machine::GetXReg(i32 which) const
 {
     which &= 0x1f; // Make sure the register number is 0 - 31
     return _regs[which];
@@ -321,6 +235,7 @@ void Machine::Decode()
     case JALR:
     case OP_IMM:
     case OP_IMM_32:
+    case SYSTEM:
         DecodeI();
         break;
     case STORE:
@@ -345,13 +260,101 @@ void Machine::Decode()
         break;
     }
 }
-Machine::FetchOut& Machine::DebugFetchOut()
+Machine::FetchOut&  Machine::DebugFetchOut()
 {
     return _fo;
 }
 Machine::DecodeOut& Machine::DebugDecodeOut()
 {
     return _do;
+}
+
+template <typename T>
+T Machine::MemoryRead(i64 address) const
+{
+    return *reinterpret_cast<T*>(_memory + address);
+}
+
+template <typename T>
+void Machine::MemoryWrite(i64 address, T value)
+{
+    *reinterpret_cast<T*>(_memory + address) = value;
+}
+
+i64 Machine::SignExtend(u32 value, u32 index) 
+{
+    if ((value >> index) & 1) 
+    {
+        // Sign bit is 1
+        return value | (-1u << index);
+    }
+    else 
+    {
+        // Sign bit is 0
+        return value & ~(-1u << index);
+    }  
+}
+
+void Machine::DecodeR()
+{
+    _do.rd     = (_fo.instruction >> 7)  & 0x1f;
+    _do.funct3 = (_fo.instruction >> 12) & 7;
+    _do.funct7 = (_fo.instruction >> 25) & 0x3f;
+    _do.offset = 0ll;
+    _do.left_val  = GetXReg(_fo.instruction >> 15);
+    _do.right_val = GetXReg(_fo.instruction >> 20);
+}
+void Machine::DecodeI()
+{
+    _do.rd     = (_fo.instruction >> 7)  & 0x1f;
+    _do.funct3 = (_fo.instruction >> 12) & 7;
+    _do.funct7 = 0;
+    _do.offset = SignExtend((_fo.instruction >> 20), 11u);
+    _do.left_val  = GetXReg(_fo.instruction >> 15);
+    _do.right_val = 0ll;
+}
+void Machine::DecodeS()
+{
+    _do.rd     = 0;
+    _do.funct3 = (_fo.instruction >> 12) & 7;
+    _do.funct7 = 0;
+    _do.offset = SignExtend(((_fo.instruction >> 7)  & 0x1f) |
+                           (((_fo.instruction >> 25) & 0x7f) << 5), 11u);
+    _do.left_val  = GetXReg(_fo.instruction >> 15);
+    _do.right_val = GetXReg(_fo.instruction >> 20);
+}
+void Machine::DecodeB()
+{
+    _do.rd     = 0;
+    _do.funct3 = (_fo.instruction >> 12) & 0b111;
+    _do.funct7 = 0;
+    _do.offset = SignExtend((((_fo.instruction >> 31) & 1) << 12)   |
+                            (((_fo.instruction >> 25) & 0x3f) << 5) |
+                            (((_fo.instruction >> 8)  & 0xf) << 1)  | 
+                            (((_fo.instruction >> 7)  & 1) << 11), 11u);
+    _do.left_val  = GetXReg(_fo.instruction >> 15); // get_xreg truncates for us
+    _do.right_val = GetXReg(_fo.instruction >> 20);
+}
+void Machine::DecodeU()
+{
+    _do.rd     = (_fo.instruction >> 7) & 0x1f;
+    _do.funct3 = 0;
+    _do.funct7 = 0;
+    _do.offset = SignExtend((((_fo.instruction >> 12) & 0xf'ffff) << 12), 31u);
+    _do.left_val  = 0ll;
+    _do.right_val = 0ll;
+}
+void Machine::DecodeJ()
+{
+    _do.rd     = (_fo.instruction >> 7) & 0x1f;
+    _do.funct3 = 0;
+    _do.funct7 = 0;
+    _do.offset = SignExtend((((_fo.instruction >> 31) & 1) << 19) | 
+                             ((_fo.instruction >> 21) & 0x3ff)    |
+                            (((_fo.instruction >> 20) & 1) << 10) |
+                            (((_fo.instruction >> 12) & 0xff) << 11), 19u);
+    _do.left_val  = 0ll;
+    _do.right_val = 0ll;
 }
 
 int main(int argc, char* argv[])
