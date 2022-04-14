@@ -3,6 +3,14 @@
 // Read from a binary file and store intructions in memory allocated on the heap
 // The Machine class manages and fetches the instructions from memory
 
+
+// decode out namings to snakecase
+// add defaults to the switch statements
+// idk about finding the alu commands in execute for srli and srai
+// offsets don't seem right
+// but it should be right
+// alu not
+
 #include <iostream> // ...
 #include <cstdint>
 #include <fstream>
@@ -10,13 +18,11 @@
 #include <iomanip>
 
 using u8  = std::uint_fast8_t;
-using i8  = std::int_fast8_t;
+using i8  = std:: int_fast8_t;
 using u32 = std::uint_fast32_t;
-using i32 = std::int_fast32_t;
+using i32 = std:: int_fast32_t;
 using u64 = std::uint_fast64_t;
-using i64 = std::int_fast64_t;
-
-// have alu be a separate class?
+using i64 = std:: int_fast64_t;
 
 namespace Opcodes
 {
@@ -45,7 +51,8 @@ namespace Alu
     {
         ALU_ADD, ALU_SUB, ALU_MUL, ALU_DIV,
         ALU_REM, ALU_SLL, ALU_SRL, ALU_SRA,
-        ALU_AND, ALU_OR,  ALU_XOR, ALU_NOT
+        ALU_AND, ALU_OR,  ALU_XOR, ALU_NOT,
+        ALU_NO_OP
     };
 }
 
@@ -56,15 +63,10 @@ public:
     {
         u32 instruction;
 
-        // The code below allows us to cout a FetchOut structure.
-        // We can use this to debug our code.
-        // FetchOut fo = { 0xdeadbeef };
-        // cout << fo << '\n';
         friend std::ostream& operator<<(std::ostream& out, const FetchOut& fo);
     };
     struct DecodeOut 
     {
-
         Opcodes::Categories op;
         u8  rd;
         u8  funct3;
@@ -73,7 +75,6 @@ public:
         i64 left_val;  // typically the value of rs1
         i64 right_val; // typically the value of rs2 or immediate
 
-        // same as in FetchOut: cout << do << '\n';
         friend std::ostream& operator<<(std::ostream& out, const Machine::DecodeOut& dec);
     };
     struct ExecuteOut 
@@ -81,33 +82,12 @@ public:
         i64 result;
         u8  n, z, c, v;
 
-        friend std::ostream& operator<<(std::ostream& out, const ExecuteOut& eo) 
-        {
-            std::ostringstream sout;
-            sout << "Result: " << eo.result << " [NZCV]: " 
-                << (u32)eo.n 
-                << (u32)eo.z 
-                << (u32)eo.c
-                << (u32)eo.v;
-            return out << sout.str();
-        }
+        friend std::ostream& operator<<(std::ostream& out, const ExecuteOut& eo);
     };
 
-public:
     static constexpr i32 NUM_REGS = 32;
     static constexpr i32 MEM_SIZE = 1 << 18;
 
-private:
-    char* _memory;       // The memory.
-    i32 _memorySize;     // The size of the memory (should be MEM_SIZE)
-    i64 _pc;             // The program counter
-    i64 _regs[NUM_REGS]; // The register file
-
-    FetchOut _FO; // Result of the fetch() method
-    DecodeOut _DO; // Result of the decode() method
-    ExecuteOut _EO; // Result of the execute() method
-
-public:
     Machine(char* mem, i32 size);
 
     i64 GetPC() const;
@@ -125,6 +105,7 @@ public:
     ExecuteOut& DebugExecuteOut();
 
 private:
+
     // Read from the internal memory
     // Usage:
     // int  myintval  = memory_read<int>(0);  // Read the first 4 bytes
@@ -149,6 +130,15 @@ private:
     void DecodeJ();
 
     ExecuteOut ALU(Alu::Commands cmd, i64 left, i64 right);
+
+    char* _memory;       // The memory.
+    i32 _memorySize;     // The size of the memory (should be MEM_SIZE)
+    i64 _pc;             // The program counter
+    i64 _regs[NUM_REGS]; // The register file
+
+    FetchOut _FO; // Result of the fetch() method
+    DecodeOut _DO; // Result of the decode() method
+    ExecuteOut _EO; // Result of the execute() method
 };
 
 std::ostream& operator<<(std::ostream& out, const Machine::FetchOut& fo) 
@@ -300,27 +290,47 @@ void Machine::Execute()
     using namespace Opcodes;
     using namespace Alu;
 
-    Commands cmd;
+    Commands cmd = ALU_NO_OP;
 
     // Most instructions will follow left/right
     // but some won't, so we need these:
     i64 op_left  = _DO.left_val;
     i64 op_right = _DO.right_val; 
-    
-    if (_DO.op == BRANCH) 
+/*
+LUI, AUIPC, JAL, JALR, BEQ, BNE, BLT, BGE, LB, LH, LW, LD, LBU, 
+LHU, LWU, SB, SH, SW, SD, ADDI, XORI, ORI, ANDI, SLLI, SRLI, SRAI, 
+ADD, SUB, SLL, XOR, SRL, SRA, OR, AND, ECALL, MUL, DIV, REM.
+*/
+/*
+, , , ,
+, , , , ,
+,, SYSTEM,
+jalr, jal
+
+*/
+    switch (_DO.op)
     {
-        // A branch needs to subtract the operands
+    case BRANCH:
         cmd = ALU_SUB;
-    }
-    else if (_DO.op == LOAD || _DO.op == STORE) 
-    {
-        // For loads and stores, we need to add the
-        // offset with the base register.
+        break;
+
+    case AUIPC:
+        op_left = _pc;
         cmd = ALU_ADD;
-    }
-    else if (_DO.op == OP) 
-    {
-        // We can't tell which ALU command to use until
+        break;
+    
+    case JALR:
+    case JAL:
+        cmd = ALU_ADD;
+        break;
+
+    case LOAD:
+    case LUI:
+    case STORE:
+        cmd = ALU_ADD;
+        break;
+
+    case OP:
         // we read the funct3 and funct7
         switch (_DO.funct3) 
         {
@@ -334,32 +344,129 @@ void Machine::Execute()
                 cmd = ALU_SUB;
             }
             break;
-        // Finish the rest of the OP functions here.
+        case 0b001: // SLL
+            cmd = ALU_SLL; 
+            break;
+        case 0b010: // SLT
+            cmd = ALU_SUB;
+            break;
+        case 0b011: // SLTU
+            cmd = ALU_SUB;
+            break;
+        case 0b100: // XOR
+            cmd = ALU_XOR;
+            break;
+        case 0b101: // SRL or SRA
+            if (_DO.funct7 == 0)
+                cmd = ALU_SRL;
+            else if (_DO.funct7 == 32)
+                cmd = ALU_SRA;
+            break;
+        case 0b110: // OR 
+            cmd = ALU_OR;
+            break;
+        case 0b111: // AND
+            cmd = ALU_AND;
+            break;
         }
-    }
-    else if (_DO.op == OP_32) 
-    {
+        break;
+
+    case OP_32:
         op_left  = SignExtend(op_left,  31);
         op_right = SignExtend(op_right, 31);
         // You still need to determine the ALU command
-    }
-    else if (_DO.op == OP_IMM) 
-    {
+        switch (_DO.funct3)
+        {
+        case 0b000:
+            if (_DO.funct7 == 0)
+                cmd = ALU_ADD; // ADDW
+            else if (_DO.funct7 == 1) 
+                cmd = ALU_MUL; // MULW
+            else if (_DO.funct7 == 32) 
+                cmd = ALU_SUB; // SUBW
+            break;
+        case 0b001:
+            cmd = ALU_SLL; // SLLW
+            break;
+        case 0b100:
+            cmd = ALU_DIV; // DIVW
+            break;
+        case 0b101:
+            if (_DO.funct7 == 0)
+                cmd = ALU_SRL; // SRLW
+            else if (_DO.funct7 == 1)
+                cmd = ALU_DIV; // DIVUW
+            else if (_DO.funct7 == 32)
+                cmd = ALU_SRA; // SRAW
+            break;
+        case 0b110:
+            cmd = ALU_REM; // REMW
+            break;
+        case 0b111:
+            cmd = ALU_REM; // REMUW
+            break;
+        }
+        break;
+
+    case OP_IMM:
         // Look and see which ALU op needs to be executed.
-    }
-    else if (_DO.op == OP_IMM_32) 
-    { 
-        op_left  = SignExtend(op_left,  31);
-        op_right = SignExtend(op_right, 31);
+        switch (_DO.funct3)
+        {
+        case 0b000: // ADDI
+            cmd = ALU_ADD;
+            break;
+        case 0b001: // SLLI (64)
+            cmd = ALU_SLL;
+            break;
+        case 0b010: // SLTI
+            cmd = ALU_SUB;
+            break;
+        case 0b011: // SLTIU
+            cmd = ALU_SUB;
+            break;
+        case 0b100: // XORI
+            cmd = ALU_XOR;
+            break;
+        case 0b101: // SRLI, SRAI (64)
+            if (op_right >> 6 == 16)
+                cmd = ALU_SRA; 
+            else
+                cmd = ALU_SRL;
+            break;
+        case 0b110: // ORI
+            cmd = ALU_OR;
+            break;
+        case 0b111:
+            cmd = ALU_AND;
+            break;
+        }
+        break;
+
+    case OP_IMM_32:
         // This is just like OP_IMM except we truncated
         // the left and right ops.
+        op_left  = SignExtend(op_left,  31);
+        op_right = SignExtend(op_right, 31);
+
+        // Look and see which ALU op needs to be executed.
+        switch (_DO.funct3)
+        {
+        case 0b000:
+            cmd = ALU_ADD; // ADDIW
+            break;
+        case 0b001:
+            cmd = ALU_SLL; // SLLIW
+            break;
+        case 0b101:
+            if (op_right >> 5 == 32)
+                cmd = ALU_SRA; // SRAIW
+            else
+                cmd = ALU_SRL; // SRLIW
+            break;
+        }
+        break;
     }
-    else if (_DO.op == JALR) 
-    {
-        // JALR has an offset and a register value that
-        // need to be added together.
-        cmd = ALU_ADD;
-    }
+    
     _EO = ALU(cmd, op_left, op_right);
 }
 
@@ -447,9 +554,9 @@ void Machine::DecodeU()
     _DO.rd     = (_FO.instruction >> 7) & 0x1f;
     _DO.funct3 = 0;
     _DO.funct7 = 0;
-    _DO.offset = SignExtend((((_FO.instruction >> 12) & 0xf'ffff) << 12), 31u);
+    _DO.offset = 0ll;
     _DO.left_val  = 0ll;
-    _DO.right_val = 0ll;
+    _DO.right_val = SignExtend((((_FO.instruction >> 12) & 0xf'ffff) << 12), 31u);
 }
 void Machine::DecodeJ()
 {
@@ -487,10 +594,27 @@ Machine::ExecuteOut Machine::ALU(Alu::Commands cmd, i64 left, i64 right)
     case ALU_REM:
         ret.result = left % right;
         break;
+    case ALU_AND:
+        ret.result = left & right;
+        break;
+    case ALU_OR:
+        ret.result = left | right;
+        break;
+    case ALU_XOR:
+        ret.result = left ^ right;
+        break;
+    case ALU_NOT:
+        ret.result = ~right;
+        break;
     case ALU_SRL:
         ret.result = static_cast<u64>(left) >> right;
         break;
-        // Finish the commands here.
+    case ALU_SLL:
+        ret.result = left << right;
+        break;
+    case ALU_SRA:
+        ret.result = left >> right;
+        break;
     }
 
     // Now that we have the result, determine the flags.
@@ -500,8 +624,8 @@ Machine::ExecuteOut Machine::ALU(Alu::Commands cmd, i64 left, i64 right)
 
     ret.z = !ret.result;
     ret.n = sign_result;
-    ret.v = ~sign_left & ~sign_right & sign_result |
-             sign_left & sign_right & ~sign_result;
+    ret.v = (~sign_left & ~sign_right & sign_result) |
+            (sign_left  & sign_right  & ~sign_result);
     ret.c = (ret.result > left) || (ret.result > right);
 
     return ret;
