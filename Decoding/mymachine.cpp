@@ -55,7 +55,6 @@ public:
     };
     struct DecodeOut 
     {
-
         Opcodes::Categories op;
         u8  rd;
         u8  funct3;

@@ -296,74 +296,94 @@ void Machine::Execute()
     // but some won't, so we need these:
     i64 op_left  = _DO.left_val;
     i64 op_right = _DO.right_val; 
-/*
-LUI, AUIPC, JAL, JALR, BEQ, BNE, BLT, BGE, LB, LH, LW, LD, LBU, 
-LHU, LWU, SB, SH, SW, SD, ADDI, XORI, ORI, ANDI, SLLI, SRLI, SRAI, 
-ADD, SUB, SLL, XOR, SRL, SRA, OR, AND, ECALL, MUL, DIV, REM.
-*/
-/*
-, , , ,
-, , , , ,
-,, SYSTEM,
-jalr, jal
 
-*/
     switch (_DO.op)
     {
-    case BRANCH:
-        cmd = ALU_SUB;
+    case BRANCH: // BEQ, BNE, BLT, BGE
+        cmd = ALU_SUB; 
         break;
 
-    case AUIPC:
+    case AUIPC: // AUIPC
         op_left = _pc;
-        cmd = ALU_ADD;
+        cmd = ALU_ADD; 
         break;
     
-    case JALR:
-    case JAL:
+    case JALR: // JALR
+        // offset and a register value need to be added together
+        cmd = ALU_ADD;
+        break; 
+
+    case JAL: // JAL
+        op_left  = _pc;
+        op_right = 4;
+        cmd = ALU_ADD; 
+        break;
+
+    case LUI:
         cmd = ALU_ADD;
         break;
 
-    case LOAD:
-    case LUI:
-    case STORE:
+    case LOAD: // LB, LH, LW, LD, LBU, LHU, LWU
+        cmd = ALU_ADD;
+        break;
+
+    case STORE: // SB, SH, SW, SD
+        op_right = _DO.offset;
         cmd = ALU_ADD;
         break;
 
     case OP:
-        // we read the funct3 and funct7
         switch (_DO.funct3) 
         {
-        case 0b000: // ADD or SUB
-            if (_DO.funct7 == 0) 
+        case 0b000: // ADD, MUL, SUB 
+            switch (_DO.funct7)
             {
+            case 0: // ADD
                 cmd = ALU_ADD;
-            }
-            else if (_DO.funct7 == 32) 
-            {
+                break;
+            case 1: // MUL
+                cmd = ALU_MUL;
+                break;
+            case 32: // SUB
                 cmd = ALU_SUB;
+                break;
             }
             break;
         case 0b001: // SLL
             cmd = ALU_SLL; 
             break;
-        case 0b010: // SLT
-            cmd = ALU_SUB;
+        case 0b100: // XOR, DIV
+            switch (_DO.funct7)
+            {
+            case 0: // XOR
+                cmd = ALU_XOR;
+                break;
+            case 1: // DIV
+                cmd = ALU_DIV;
+                break;
+            }
             break;
-        case 0b011: // SLTU
-            cmd = ALU_SUB;
-            break;
-        case 0b100: // XOR
-            cmd = ALU_XOR;
-            break;
-        case 0b101: // SRL or SRA
-            if (_DO.funct7 == 0)
+        case 0b101: // SRL, SRA
+            switch (_DO.funct7)
+            {
+            case 0: // SRL
                 cmd = ALU_SRL;
-            else if (_DO.funct7 == 32)
+                break;
+            case 32: // SRA
                 cmd = ALU_SRA;
+                break;
+            }
             break;
-        case 0b110: // OR 
-            cmd = ALU_OR;
+        case 0b110: // OR, REM
+            switch (_DO.funct7)
+            {
+            case 0: // OR
+                cmd = ALU_OR;
+                break;
+            case 1: // REM
+                cmd = ALU_REM;
+                break;
+            }
             break;
         case 0b111: // AND
             cmd = ALU_AND;
@@ -372,18 +392,24 @@ jalr, jal
         break;
 
     case OP_32:
-        op_left  = SignExtend(op_left,  31);
-        op_right = SignExtend(op_right, 31);
+        op_left  = SignExtend(op_left,  31u);
+        op_right = SignExtend(op_right, 31u);
         // You still need to determine the ALU command
         switch (_DO.funct3)
         {
         case 0b000:
-            if (_DO.funct7 == 0)
+            switch (_DO.funct7)
+            {
+            case 0:
                 cmd = ALU_ADD; // ADDW
-            else if (_DO.funct7 == 1) 
+                break;
+            case 1:
                 cmd = ALU_MUL; // MULW
-            else if (_DO.funct7 == 32) 
+                break;
+            case 32:
                 cmd = ALU_SUB; // SUBW
+                break;
+            }
             break;
         case 0b001:
             cmd = ALU_SLL; // SLLW
@@ -392,12 +418,18 @@ jalr, jal
             cmd = ALU_DIV; // DIVW
             break;
         case 0b101:
-            if (_DO.funct7 == 0)
+            switch (_DO.funct7)
+            {
+            case 0:
                 cmd = ALU_SRL; // SRLW
-            else if (_DO.funct7 == 1)
+                break;
+            case 1:
                 cmd = ALU_DIV; // DIVUW
-            else if (_DO.funct7 == 32)
+                break;
+            case 32:
                 cmd = ALU_SRA; // SRAW
+                break;
+            }
             break;
         case 0b110:
             cmd = ALU_REM; // REMW
@@ -418,17 +450,11 @@ jalr, jal
         case 0b001: // SLLI (64)
             cmd = ALU_SLL;
             break;
-        case 0b010: // SLTI
-            cmd = ALU_SUB;
-            break;
-        case 0b011: // SLTIU
-            cmd = ALU_SUB;
-            break;
         case 0b100: // XORI
             cmd = ALU_XOR;
             break;
         case 0b101: // SRLI, SRAI (64)
-            if (op_right >> 6 == 16)
+            if (op_right >> 6 == 16ll)
                 cmd = ALU_SRA; 
             else
                 cmd = ALU_SRL;
@@ -436,7 +462,7 @@ jalr, jal
         case 0b110: // ORI
             cmd = ALU_OR;
             break;
-        case 0b111:
+        case 0b111: // ANDI
             cmd = ALU_AND;
             break;
         }
@@ -445,8 +471,8 @@ jalr, jal
     case OP_IMM_32:
         // This is just like OP_IMM except we truncated
         // the left and right ops.
-        op_left  = SignExtend(op_left,  31);
-        op_right = SignExtend(op_right, 31);
+        op_left  = SignExtend(op_left,  31u);
+        op_right = SignExtend(op_right, 31u);
 
         // Look and see which ALU op needs to be executed.
         switch (_DO.funct3)
@@ -458,13 +484,18 @@ jalr, jal
             cmd = ALU_SLL; // SLLIW
             break;
         case 0b101:
-            if (op_right >> 5 == 32)
+            if (op_right >> 5 == 32ll)
                 cmd = ALU_SRA; // SRAIW
             else
                 cmd = ALU_SRL; // SRLIW
             break;
         }
         break;
+
+    default:
+        op_left  = 0ll;
+        op_right = 0ll;
+        cmd = ALU_NO_OP;
     }
     
     _EO = ALU(cmd, op_left, op_right);
@@ -563,12 +594,12 @@ void Machine::DecodeJ()
     _DO.rd     = (_FO.instruction >> 7) & 0x1f;
     _DO.funct3 = 0;
     _DO.funct7 = 0;
-    _DO.offset = SignExtend((((_FO.instruction >> 31) & 1) << 19) | 
-                             ((_FO.instruction >> 21) & 0x3ff)    |
-                            (((_FO.instruction >> 20) & 1) << 10) |
-                            (((_FO.instruction >> 12) & 0xff) << 11), 19u);
+    _DO.offset = 0ll;
     _DO.left_val  = 0ll;
-    _DO.right_val = 0ll;
+    _DO.right_val = SignExtend((((_FO.instruction >> 31) & 1) << 19) | 
+                                ((_FO.instruction >> 21) & 0x3ff)    |
+                               (((_FO.instruction >> 20) & 1) << 10) |
+                               (((_FO.instruction >> 12) & 0xff) << 11), 19u);
 }
 
 Machine::ExecuteOut Machine::ALU(Alu::Commands cmd, i64 left, i64 right)
@@ -579,6 +610,8 @@ Machine::ExecuteOut Machine::ALU(Alu::Commands cmd, i64 left, i64 right)
 
     switch (cmd) 
     {
+    case ALU_NO_OP:
+        break;
     case ALU_ADD:
         ret.result = left + right;
         break;
@@ -624,8 +657,8 @@ Machine::ExecuteOut Machine::ALU(Alu::Commands cmd, i64 left, i64 right)
 
     ret.z = !ret.result;
     ret.n = sign_result;
-    ret.v = (~sign_left & ~sign_right & sign_result) |
-            (sign_left  & sign_right  & ~sign_result);
+    ret.v = (~sign_left & ~sign_right &  sign_result) |
+            ( sign_left &  sign_right & ~sign_result);
     ret.c = (ret.result > left) || (ret.result > right);
 
     return ret;
