@@ -3,7 +3,7 @@
 // Read from a binary file and store intructions in memory allocated on the heap
 // The Machine class manages and fetches the instructions from memory
 
-#include <iostream> // ...
+#include <iostream> 
 #include <cstdint>
 #include <fstream>
 #include <sstream>
@@ -76,6 +76,11 @@ public:
 
         friend std::ostream& operator<<(std::ostream& out, const ExecuteOut& eo);
     };
+    struct MemoryOut {
+        i64 value;
+
+        friend std::ostream& operator<<(std::ostream& out, const MemoryOut& mo); 
+    };
 
     static constexpr i32 NUM_REGS = 32;
     static constexpr i32 MEM_SIZE = 1 << 18;
@@ -91,10 +96,12 @@ public:
     void Fetch();
     void Decode();
     void Execute();
+    void Memory();
 
     FetchOut& DebugFetchOut();
     DecodeOut& DebugDecodeOut();
     ExecuteOut& DebugExecuteOut();
+    MemoryOut& DebugMemoryOut();
 
 private:
 
@@ -131,6 +138,7 @@ private:
     FetchOut _FO; // Result of the fetch() method
     DecodeOut _DO; // Result of the decode() method
     ExecuteOut _EO; // Result of the execute() method
+    MemoryOut _MO;
 };
 
 std::ostream& operator<<(std::ostream& out, const Machine::FetchOut& fo) 
@@ -194,6 +202,12 @@ std::ostream& operator<<(std::ostream& out, const Machine::ExecuteOut& eo)
         << (u32)eo.z 
         << (u32)eo.c
         << (u32)eo.v;
+    return out << sout.str();
+}
+std::ostream& operator<<(std::ostream& out, const Machine::MemoryOut& mo) 
+{
+    std::ostringstream sout;
+    sout << "0x" << std::hex << std::right << std::setfill('0') << std::setw(16) << mo.value;
     return out << sout.str();
 }
 
@@ -492,6 +506,44 @@ void Machine::Execute()
     
     _EO = ALU(cmd, opLeft, opRight);
 }
+void Machine::Memory() 
+{
+    using namespace Opcodes;
+
+    switch (_DO.op)
+    {
+    case STORE:
+        switch (_DO.funct3) 
+        {
+        case 0b000: // SB
+            MemoryWrite<u8>(_EO.result, _DO.rightVal);
+            break;
+        // Finish here
+        default:
+            std::cerr << "[MEMORY: STORE]: Invalid funct3: " << _DO.funct3 << '\n';
+            break;
+        }
+        break;
+
+    case LOAD:
+        switch (_DO.funct3) 
+        {
+        case 0b000: // LB
+            _MO.value = MemoryRead<i8>(_EO.result);
+            break;
+        // Finish here
+        default:
+            std::cerr << "[MEMORY: LOAD]: Invalid funct3: " << _DO.funct3 << '\n';
+            break;
+        }
+        break;
+
+    default:
+        // If this is not a LOAD or STORE, then this stage just copies
+        // the ALU result.
+        _MO.value = _EO.result;
+    }
+}
 
 Machine::FetchOut& Machine::DebugFetchOut()
 {
@@ -504,6 +556,10 @@ Machine::DecodeOut& Machine::DebugDecodeOut()
 Machine::ExecuteOut& Machine::DebugExecuteOut()
 {
     return _EO;
+}
+Machine::MemoryOut& Machine::DebugMemoryOut()
+{
+    return _MO;
 }
 
 template <typename T>
@@ -710,7 +766,9 @@ int main(int argc, char* argv[])
         std::cout << coolMachine.DebugDecodeOut() << '\n';
         coolMachine.Execute();
         std::cout << coolMachine.DebugExecuteOut() << '\n';
-        coolMachine.SetPC(coolMachine.GetPC() + 4);
+        coolMachine.Memory();
+        std::cout << coolMachine.DebugMemoryOut() << '\n';
+        coolMachine.SetPC(coolMachine.GetPC() + 4ll);
     }
 
     // cleanup
