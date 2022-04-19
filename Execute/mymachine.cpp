@@ -3,7 +3,7 @@
 // Read from a binary file and store intructions in memory allocated on the heap
 // The Machine class manages and fetches the instructions from memory
 
-#include <iostream> // ...
+#include <iostream> 
 #include <cstdint>
 #include <fstream>
 #include <sstream>
@@ -55,6 +55,7 @@ public:
     {
         u32 instruction;
 
+        // usage: std::cout << DebugFetchOut();
         friend std::ostream& operator<<(std::ostream& out, const FetchOut& fo);
     };
     struct DecodeOut 
@@ -63,10 +64,11 @@ public:
         u8  rd;
         u8  funct3;
         u8  funct7;
-        i64 offset;    // Offsets for BRANCH and STORE
+        i64 offset;   // Offsets for BRANCH and STORE
         i64 leftVal;  // typically the value of rs1
         i64 rightVal; // typically the value of rs2 or immediate
 
+        // usage: std::cout << DebugDecodeOut();
         friend std::ostream& operator<<(std::ostream& out, const Machine::DecodeOut& dec);
     };
     struct ExecuteOut 
@@ -74,24 +76,29 @@ public:
         i64 result;
         u8  n, z, c, v;
 
+        // usage: std::cout << DebugExecuteOut();
         friend std::ostream& operator<<(std::ostream& out, const ExecuteOut& eo);
     };
 
-    static constexpr i32 NUM_REGS = 32;
-    static constexpr i32 MEM_SIZE = 1 << 18;
+    static constexpr i32 NUM_REGS = 32; // 32 registers
+    static constexpr i32 MEM_SIZE = 1 << 18; // 2^18
 
     Machine(char* mem, i32 size);
 
+    // get and set the program counter
     i64 GetPC() const;
     void SetPC(i64 to);
 
+    // get and set an integer register
     i64 GetXReg(i32 which) const;
     void SetXReg(i32 which, i64 value);
 
+    // public pipeline functions
     void Fetch();
     void Decode();
     void Execute();
 
+    // return different stages of the pipeline for debugging
     FetchOut& DebugFetchOut();
     DecodeOut& DebugDecodeOut();
     ExecuteOut& DebugExecuteOut();
@@ -112,8 +119,10 @@ private:
     template <typename T>
     void MemoryWrite(i64 address, T value);
 
+    // sign extend a value with sign bit at index
     i64 SignExtend(u64 value, u32 index);
 
+    // decode different instruction types
     void DecodeR();
     void DecodeI();
     void DecodeS();
@@ -121,6 +130,7 @@ private:
     void DecodeU();
     void DecodeJ();
 
+    // perform an operation in the alu
     ExecuteOut ALU(Alu::Commands cmd, i64 left, i64 right);
 
     char* _memory;       // The memory.
@@ -279,6 +289,7 @@ void Machine::Decode()
 }
 void Machine::Execute() 
 {
+    // to grab Commands and Opcodes enums
     using namespace Opcodes;
     using namespace Alu;
 
@@ -304,12 +315,6 @@ void Machine::Execute()
         // offset and a register value need to be added together
         cmd = ALU_ADD;
         break; 
-
-    case JAL: // JAL
-        opLeft  = _pc;
-        opRight = 4;
-        cmd = ALU_ADD; 
-        break;
 
     case LUI:
         cmd = ALU_ADD;
@@ -446,7 +451,7 @@ void Machine::Execute()
             cmd = ALU_XOR;
             break;
         case 0b101: // SRLI, SRAI (64)
-            if (opRight >> 6 == 16ll)
+            if (opRight >> 10)
                 cmd = ALU_SRA; 
             else
                 cmd = ALU_SRL;
@@ -476,7 +481,7 @@ void Machine::Execute()
             cmd = ALU_SLL; // SLLIW
             break;
         case 0b101:
-            if (opRight >> 5 == 32ll)
+            if (opRight >> 10)
                 cmd = ALU_SRA; // SRAIW
             else
                 cmd = ALU_SRL; // SRLIW
@@ -600,6 +605,7 @@ Machine::ExecuteOut Machine::ALU(Alu::Commands cmd, i64 left, i64 right)
 
     ExecuteOut ret;
 
+    // perform the appropriate operation 
     switch (cmd) 
     {
     case ALU_NO_OP:
