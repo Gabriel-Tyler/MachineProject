@@ -1,7 +1,7 @@
 // Gabriel Tyler
 // 04/03/22
 // Read from a binary file and store intructions in memory allocated on the heap
-// The Machine class manages and fetches the instructions from memory
+// The Machine class manages the instruction pipeline
 
 #include <iostream> 
 #include <cstdint>
@@ -609,6 +609,7 @@ Machine::ExecuteOut Machine::ALU(Alu::Commands cmd, i64 left, i64 right)
     switch (cmd) 
     {
     case ALU_NO_OP:
+        ret.result = 0ll;
         break;
     case ALU_ADD:
         ret.result = left + right;
