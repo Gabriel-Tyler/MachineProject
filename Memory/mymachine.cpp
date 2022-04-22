@@ -600,7 +600,8 @@ T Machine::MemoryRead(i64 address) const
     // example: T = char: max address = MEM_SIZE-1  
     //          T =  i64: max address = MEM_SIZE-8  
 
-    if (address < 0 || address > _memorySize-sizeof(T))
+    i64 numBytes = static_cast<i64>(sizeof(T));
+    if (address < 0 || address > _memorySize-numBytes)
     {
         std::cerr << "[MemoryRead]: address " << address << " would access undefined memory\n";
         return T(); // 0
@@ -615,7 +616,8 @@ void Machine::MemoryWrite(i64 address, T value)
     // _memory has addresses [0, _memorySize-1] (inclusive)
     // the max value of address is _memorySize - sizeof(T) (number of bytes in T)
 
-    if (address < 0 || address > _memorySize-sizeof(T))
+    i64 numBytes = static_cast<i64>(sizeof(T));
+    if (address < 0 || address > _memorySize-numBytes)
     {
         std::cerr << "[MemoryWrite]: address " << address << " would access undefined memory\n";
         return;
