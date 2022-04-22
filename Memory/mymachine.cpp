@@ -334,6 +334,11 @@ void Machine::Execute()
         // offset and a register value need to be added together
         cmd = ALU_ADD;
         break; 
+    
+    case JAL:
+        opLeft = _pc;
+        cmd = ALU_ADD;
+        break;
 
     case LUI:
         cmd = ALU_ADD;
