@@ -513,6 +513,9 @@ void Machine::Memory()
 
     // out of bounds checks are done inside of MemoryWrite and MemoryRead
 
+    // Read or Write based on the Opcode
+    // Determine the size based on the funct3
+
     switch (_DO.op)
     {
     case STORE:
