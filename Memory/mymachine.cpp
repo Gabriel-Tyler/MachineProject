@@ -1,15 +1,14 @@
 // Gabriel Tyler
-// 04/03/22
+// 04/20/22
+// Machine Project: Memory
 // Read from a binary file and store intructions in memory allocated on the heap
-// The Machine class manages and fetches the instructions from memory
+// The Machine class goes through the instruction pipeline based on the stored instructions
 
+#include <cstdint> // [u]int_leastN_t
+#include <fstream> // ifstream
+#include <iomanip> 
 #include <iostream> 
-#include <cstdint>
-#include <fstream>
-#include <sstream>
-#include <iomanip>
-
-// insert memory address bounds in memory
+#include <sstream> // ostringstream
 
 using u8  = std::uint_least8_t;
 using i8  = std:: int_least8_t;
@@ -20,41 +19,24 @@ using i32 = std:: int_least32_t;
 using u64 = std::uint_least64_t;
 using i64 = std:: int_least64_t;
 
-namespace Opcodes
+class Machine
 {
-    enum Categories 
+public:
+    enum Opcodes 
     {
         LOAD, STORE, BRANCH, JALR,
         JAL, OP_IMM, OP, AUIPC, LUI,
         OP_IMM_32, OP_32, SYSTEM,
         UNIMPL
     };
-    constexpr Categories OC_MAP[4][8] = {
-        // First row (inst[6:5] = 0b00)
-        { LOAD, UNIMPL, UNIMPL, UNIMPL, OP_IMM, AUIPC, OP_IMM_32, UNIMPL }, 
-        // Second row (inst[6:5] = 0b01)
-        { STORE, UNIMPL, UNIMPL, UNIMPL, OP, LUI, OP_32, UNIMPL },
-        // Third row (inst[6:5] = 0b10)
-        { UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL },
-        // Fourth row (inst[6:5] = 0b11)
-        { BRANCH, JALR, UNIMPL, JAL, SYSTEM, UNIMPL, UNIMPL, UNIMPL }
-    };
-}
-
-namespace Alu
-{
-    enum Commands 
+    enum Alu 
     {
-        ALU_ADD, ALU_SUB, ALU_MUL, ALU_DIV,
-        ALU_REM, ALU_SLL, ALU_SRL, ALU_SRA,
-        ALU_AND, ALU_OR,  ALU_XOR, ALU_NOT,
-        ALU_NO_OP
+        ADD, SUB, MUL, DIV,
+        REM, SLL, SRL, SRA,
+        AND, OR,  XOR, NOT,
+        NO_OP
     };
-}
 
-class Machine
-{
-public:
     struct FetchOut 
     {
         u32 instruction;
@@ -64,7 +46,7 @@ public:
     };
     struct DecodeOut 
     {
-        Opcodes::Categories op;
+        Opcodes op;
         u8  rd;
         u8  funct3;
         u8  funct7;
@@ -73,7 +55,7 @@ public:
         i64 rightVal; // typically the value of rs2 or immediate
 
         // usage: std::cout << DebugDecodeOut();
-        friend std::ostream& operator<<(std::ostream& out, const Machine::DecodeOut& dec);
+        friend std::ostream& operator<<(std::ostream& out, const DecodeOut& dec);
     };
     struct ExecuteOut 
     {
@@ -90,10 +72,7 @@ public:
         friend std::ostream& operator<<(std::ostream& out, const MemoryOut& mo); 
     };
 
-    static constexpr i32 NUM_REGS = 32; // 32 registers
-    static constexpr i32 MEM_SIZE = 1 << 18; // 2^18
-
-    Machine(char* mem, i32 size);
+    Machine(char* mem, i64 size);
 
     // get and set the program counter
     i64 GetPC() const;
@@ -116,7 +95,6 @@ public:
     MemoryOut& DebugMemoryOut();
 
 private:
-
     // Read from the internal memory
     // Usage:
     // int  myintval  = memory_read<int>(0);  // Read the first 4 bytes
@@ -132,7 +110,7 @@ private:
     void MemoryWrite(i64 address, T value);
 
     // sign extend a value with sign bit at index
-    i64 SignExtend(u64 value, u32 index);
+    i64 SignExtend(u64 value, u32 index) const;
 
     // decode different instruction types
     void DecodeR();
@@ -143,10 +121,13 @@ private:
     void DecodeJ();
 
     // perform an operation in the alu
-    ExecuteOut ALU(Alu::Commands cmd, i64 left, i64 right);
+    ExecuteOut ALU(Alu cmd, i64 left, i64 right) const;
 
-    char* _memory;       // The memory.
-    i32 _memorySize;     // The size of the memory (should be MEM_SIZE)
+    static const Opcodes OC_MAP[4][8]; // defined outside of class
+    static const i32 NUM_REGS = 32; // 32 registers
+
+    char* _memory;       // The memory
+    i64 _memorySize;     // The size of the memory (should be MEM_SIZE)
     i64 _pc;             // The program counter
     i64 _regs[NUM_REGS]; // The register file
 
@@ -154,6 +135,18 @@ private:
     DecodeOut _DO; // Result of the decode() method
     ExecuteOut _EO; // Result of the execute() method
     MemoryOut _MO;
+};
+
+// Because OpcodeMap is a static MD array, it has to be defined outside of the class for some reason
+const Machine::Opcodes Machine::OC_MAP[4][8] = {
+    // First row (inst[6:5] = 0b00)
+    { LOAD, UNIMPL, UNIMPL, UNIMPL, OP_IMM, AUIPC, OP_IMM_32, UNIMPL }, 
+    // Second row (inst[6:5] = 0b01)
+    { STORE, UNIMPL, UNIMPL, UNIMPL, OP, LUI, OP_32, UNIMPL },
+    // Third row (inst[6:5] = 0b10)
+    { UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL },
+    // Fourth row (inst[6:5] = 0b11)
+    { BRANCH, JALR, UNIMPL, JAL, SYSTEM, UNIMPL, UNIMPL, UNIMPL }
 };
 
 std::ostream& operator<<(std::ostream& out, const Machine::FetchOut& fo) 
@@ -164,38 +157,36 @@ std::ostream& operator<<(std::ostream& out, const Machine::FetchOut& fo)
 }
 std::ostream& operator<<(std::ostream& out, const Machine::DecodeOut& dec) 
 {
-    using namespace Opcodes;
-
     // We will write this under Testing
     std::ostringstream sout;
     sout << "Operation: ";
     switch (dec.op) 
     {
-    case LUI:
+    case Machine::LUI:
         sout << "LUI"; break;
-    case AUIPC:
+    case Machine::AUIPC:
         sout << "AUIPC"; break;
-    case LOAD:
+    case Machine::LOAD:
         sout << "LOAD"; break;
-    case STORE:
+    case Machine::STORE:
         sout << "STORE"; break;
-    case OP_IMM:
+    case Machine::OP_IMM:
         sout << "OPIMM"; break;
-    case OP_IMM_32:
+    case Machine::OP_IMM_32:
         sout << "OPIMM32"; break;
-    case OP:
+    case Machine::OP:
         sout << "OP"; break;
-    case OP_32:
+    case Machine::OP_32:
         sout << "OP32"; break;
-    case BRANCH:
+    case Machine::BRANCH:
         sout << "BRANCH"; break;
-    case JALR:
+    case Machine::JALR:
         sout << "JALR"; break;
-    case JAL:
+    case Machine::JAL:
         sout << "JAL"; break;
-    case SYSTEM:
+    case Machine::SYSTEM:
         sout << "SYSTEM"; break;
-    case UNIMPL:
+    case Machine::UNIMPL:
         sout << "NOT-IMPLEMENTED"; break;
     default: 
         sout << "???";
@@ -226,7 +217,7 @@ std::ostream& operator<<(std::ostream& out, const Machine::MemoryOut& mo)
     return out << sout.str();
 }
 
-Machine::Machine(char* mem, i32 size)
+Machine::Machine(char* mem, i64 size)
     : _memory(mem), _memorySize(size), _pc(0ll)
 {
     for (i32 i = 0; i < NUM_REGS; ++i)
@@ -262,8 +253,6 @@ void Machine::Fetch()
 }
 void Machine::Decode() 
 {
-    using namespace Opcodes;
-
     u8 OpcodeMapRow = (_FO.instruction >> 5) & 0b11;
     u8 OpcodeMapCol = (_FO.instruction >> 2) & 0b111;
     u8 InstSize     =  _FO.instruction & 0b11;
@@ -273,7 +262,7 @@ void Machine::Decode()
         return;
     }
 
-    _DO.op = OC_MAP[OpcodeMapRow][OpcodeMapCol];
+    _DO.op = Machine::OC_MAP[OpcodeMapRow][OpcodeMapCol];
     // Decode the rest of _DO based on the instruction type
     switch (_DO.op)
     {
@@ -309,10 +298,7 @@ void Machine::Decode()
 void Machine::Execute() 
 {
     // to grab Commands and Opcodes enums
-    using namespace Opcodes;
-    using namespace Alu;
-
-    Commands cmd = ALU_NO_OP;
+    Alu cmd = NO_OP;
 
     // Most instructions will follow left/right
     // but some won't, so we need these:
@@ -322,35 +308,35 @@ void Machine::Execute()
     switch (_DO.op)
     {
     case BRANCH: // BEQ, BNE, BLT, BGE
-        cmd = ALU_SUB; 
+        cmd = SUB; 
         break;
 
     case AUIPC: // AUIPC
         opLeft = _pc;
-        cmd = ALU_ADD; 
+        cmd = ADD; 
         break;
     
     case JALR: // JALR
         // offset and a register value need to be added together
-        cmd = ALU_ADD;
+        cmd = ADD;
         break; 
     
     case JAL:
         opLeft = _pc;
-        cmd = ALU_ADD;
+        cmd = ADD;
         break;
 
     case LUI:
-        cmd = ALU_ADD;
+        cmd = ADD;
         break;
 
     case LOAD: // LB, LH, LW, LD, LBU, LHU, LWU
-        cmd = ALU_ADD;
+        cmd = ADD;
         break;
 
     case STORE: // SB, SH, SW, SD
         opRight = _DO.offset;
-        cmd = ALU_ADD;
+        cmd = ADD;
         break;
 
     case OP:
@@ -360,27 +346,27 @@ void Machine::Execute()
             switch (_DO.funct7)
             {
             case 0: // ADD
-                cmd = ALU_ADD;
+                cmd = ADD;
                 break;
             case 1: // MUL
-                cmd = ALU_MUL;
+                cmd = MUL;
                 break;
             case 32: // SUB
-                cmd = ALU_SUB;
+                cmd = SUB;
                 break;
             }
             break;
         case 0b001: // SLL
-            cmd = ALU_SLL; 
+            cmd = SLL; 
             break;
         case 0b100: // XOR, DIV
             switch (_DO.funct7)
             {
             case 0: // XOR
-                cmd = ALU_XOR;
+                cmd = XOR;
                 break;
             case 1: // DIV
-                cmd = ALU_DIV;
+                cmd = DIV;
                 break;
             }
             break;
@@ -388,10 +374,10 @@ void Machine::Execute()
             switch (_DO.funct7)
             {
             case 0: // SRL
-                cmd = ALU_SRL;
+                cmd = SRL;
                 break;
             case 32: // SRA
-                cmd = ALU_SRA;
+                cmd = SRA;
                 break;
             }
             break;
@@ -399,15 +385,15 @@ void Machine::Execute()
             switch (_DO.funct7)
             {
             case 0: // OR
-                cmd = ALU_OR;
+                cmd = OR;
                 break;
             case 1: // REM
-                cmd = ALU_REM;
+                cmd = REM;
                 break;
             }
             break;
         case 0b111: // AND
-            cmd = ALU_AND;
+            cmd = AND;
             break;
         }
         break;
@@ -422,41 +408,41 @@ void Machine::Execute()
             switch (_DO.funct7)
             {
             case 0:
-                cmd = ALU_ADD; // ADDW
+                cmd = ADD; // ADDW
                 break;
             case 1:
-                cmd = ALU_MUL; // MULW
+                cmd = MUL; // MULW
                 break;
             case 32:
-                cmd = ALU_SUB; // SUBW
+                cmd = SUB; // SUBW
                 break;
             }
             break;
         case 0b001:
-            cmd = ALU_SLL; // SLLW
+            cmd = SLL; // SLLW
             break;
         case 0b100:
-            cmd = ALU_DIV; // DIVW
+            cmd = DIV; // DIVW
             break;
         case 0b101:
             switch (_DO.funct7)
             {
             case 0:
-                cmd = ALU_SRL; // SRLW
+                cmd = SRL; // SRLW
                 break;
             case 1:
-                cmd = ALU_DIV; // DIVUW
+                cmd = DIV; // DIVUW
                 break;
             case 32:
-                cmd = ALU_SRA; // SRAW
+                cmd = SRA; // SRAW
                 break;
             }
             break;
         case 0b110:
-            cmd = ALU_REM; // REMW
+            cmd = REM; // REMW
             break;
         case 0b111:
-            cmd = ALU_REM; // REMUW
+            cmd = REM; // REMUW
             break;
         }
         break;
@@ -466,25 +452,25 @@ void Machine::Execute()
         switch (_DO.funct3)
         {
         case 0b000: // ADDI
-            cmd = ALU_ADD;
+            cmd = ADD;
             break;
         case 0b001: // SLLI (64)
-            cmd = ALU_SLL;
+            cmd = SLL;
             break;
         case 0b100: // XORI
-            cmd = ALU_XOR;
+            cmd = XOR;
             break;
         case 0b101: // SRLI, SRAI (64)
             if (opRight >> 10)
-                cmd = ALU_SRA; 
+                cmd = SRA; 
             else
-                cmd = ALU_SRL;
+                cmd = SRL;
             break;
         case 0b110: // ORI
-            cmd = ALU_OR;
+            cmd = OR;
             break;
         case 0b111: // ANDI
-            cmd = ALU_AND;
+            cmd = AND;
             break;
         }
         break;
@@ -499,16 +485,16 @@ void Machine::Execute()
         switch (_DO.funct3)
         {
         case 0b000:
-            cmd = ALU_ADD; // ADDIW
+            cmd = ADD; // ADDIW
             break;
         case 0b001:
-            cmd = ALU_SLL; // SLLIW
+            cmd = SLL; // SLLIW
             break;
         case 0b101:
             if (opRight >> 10)
-                cmd = ALU_SRA; // SRAIW
+                cmd = SRA; // SRAIW
             else
-                cmd = ALU_SRL; // SRLIW
+                cmd = SRL; // SRLIW
             break;
         }
         break;
@@ -516,16 +502,16 @@ void Machine::Execute()
     default:
         opLeft  = 0ll;
         opRight = 0ll;
-        cmd = ALU_NO_OP;
+        cmd = NO_OP;
     }
     
     _EO = ALU(cmd, opLeft, opRight);
 }
 void Machine::Memory() 
 {
-    using namespace Opcodes;
+    // _MO.value = 0ll; // maybe reset the value in case there is no load
 
-    // _MO.value = 0ll;
+    // out of bounds checks are done inside of MemoryWrite and MemoryRead
 
     switch (_DO.op)
     {
@@ -607,16 +593,37 @@ Machine::MemoryOut& Machine::DebugMemoryOut()
 template <typename T>
 T Machine::MemoryRead(i64 address) const
 {
+    // address cannot be negative
+    // _memory has addresses [0, _memorySize-1] (inclusive)
+    // the max value of address is _memorySize - sizeof(T) (number of bytes in T)
+
+    // example: T = char: max address = MEM_SIZE-1  
+    //          T =  i64: max address = MEM_SIZE-8  
+
+    if (address < 0 || address > _memorySize-sizeof(T))
+    {
+        std::cerr << "[MemoryRead]: address " << address << " would access undefined memory\n";
+        return T(); // 0
+    }
     return *reinterpret_cast<T*>(_memory + address);
 }
 
 template <typename T>
 void Machine::MemoryWrite(i64 address, T value)
 {
+    // address cannot be negative
+    // _memory has addresses [0, _memorySize-1] (inclusive)
+    // the max value of address is _memorySize - sizeof(T) (number of bytes in T)
+
+    if (address < 0 || address > _memorySize-sizeof(T))
+    {
+        std::cerr << "[MemoryWrite]: address " << address << " would access undefined memory\n";
+        return;
+    }
     *reinterpret_cast<T*>(_memory + address) = value;
 }
 
-i64 Machine::SignExtend(u64 value, u32 index) 
+i64 Machine::SignExtend(u64 value, u32 index) const
 {
     if ((value >> index) & 1) 
     {
@@ -692,51 +699,49 @@ void Machine::DecodeJ()
                                (((_FO.instruction >> 12) & 0xff) << 11), 19u);
 }
 
-Machine::ExecuteOut Machine::ALU(Alu::Commands cmd, i64 left, i64 right)
+Machine::ExecuteOut Machine::ALU(Machine::Alu cmd, i64 left, i64 right) const
 {
-    using namespace Alu;
-
     ExecuteOut ret;
 
     // perform the appropriate operation 
     switch (cmd) 
     {
-    case ALU_NO_OP:
+    case NO_OP:
         break;
-    case ALU_ADD:
+    case ADD:
         ret.result = left + right;
         break;
-    case ALU_SUB:
+    case SUB:
         ret.result = left - right;
         break;
-    case ALU_MUL:
+    case MUL:
         ret.result = left * right;
         break;
-    case ALU_DIV:
+    case DIV:
         ret.result = left / right;
         break;
-    case ALU_REM:
+    case REM:
         ret.result = left % right;
         break;
-    case ALU_AND:
+    case AND:
         ret.result = left & right;
         break;
-    case ALU_OR:
+    case OR:
         ret.result = left | right;
         break;
-    case ALU_XOR:
+    case XOR:
         ret.result = left ^ right;
         break;
-    case ALU_NOT:
+    case NOT:
         ret.result = ~right;
         break;
-    case ALU_SRL:
+    case SRL:
         ret.result = static_cast<u64>(left) >> right;
         break;
-    case ALU_SLL:
+    case SLL:
         ret.result = left << right;
         break;
-    case ALU_SRA:
+    case SRA:
         ret.result = left >> right;
         break;
     }
@@ -771,6 +776,8 @@ int main(int argc, char* argv[])
         std::cerr << "Could not open " << argv[1] << '\n';
         return 1;
     }
+
+    constexpr i64 MEM_SIZE = 1 << 18; // 2^18
     
     // get size of file by pointing to end and getting position
     fin.seekg(0, fin.end);
@@ -778,7 +785,7 @@ int main(int argc, char* argv[])
     std::cout << "fileSize = " << fileSize << '\n';
 
     // make sure the file size doesn't exceed the memory size
-    if (fileSize > Machine::MEM_SIZE)
+    if (fileSize > MEM_SIZE)
     {
         std::cerr << "File is too large\n";
         return 1;
@@ -795,21 +802,20 @@ int main(int argc, char* argv[])
     fin.seekg(0, fin.beg);
 
     // read bytes from file into memory
-    char* memory = new char[Machine::MEM_SIZE]; 
+    char* memory = new char[MEM_SIZE]; 
     fin.read(memory, fileSize);
     fin.close();
 
     // create the Machine using the allocated memory and debug
-    Machine coolMachine(memory, Machine::MEM_SIZE);
+    Machine coolMachine(memory, MEM_SIZE);
     while (coolMachine.GetPC() < fileSize)
     {
-        // std::cout << "Program counter: " << coolMachine.GetPC() << '\n';
         coolMachine.Fetch();
-        // std::cout << "Fetch: " << coolMachine.DebugFetchOut() << '\n';
+        std::cout << coolMachine.DebugFetchOut() << '\n';
         coolMachine.Decode();
-        // std::cout << coolMachine.DebugDecodeOut() << '\n';
+        std::cout << coolMachine.DebugDecodeOut() << '\n';
         coolMachine.Execute();
-        // std::cout << coolMachine.DebugExecuteOut() << '\n';
+        std::cout << coolMachine.DebugExecuteOut() << '\n';
         coolMachine.Memory();
         std::cout << coolMachine.DebugMemoryOut() << '\n';
         coolMachine.SetPC(coolMachine.GetPC() + 4);
