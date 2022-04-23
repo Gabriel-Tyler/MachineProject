@@ -1,14 +1,18 @@
 // Gabriel Tyler
 // 04/20/22
-// Machine Project: Memory
+// Machine Project: WriteBack
 // Read from a binary file and store intructions in memory allocated on the heap
 // The Machine class goes through the instruction pipeline based on the stored instructions
 
 #include <cstdint> // [u]int_leastN_t
+#include <cstdio>
 #include <fstream> // ifstream
 #include <iomanip> 
 #include <iostream> 
 #include <sstream> // ostringstream
+
+// what instructions do nothing in Execute? comments
+// what is happening for each instruction in execute
 
 using u8  = std::uint_least8_t;
 using i8  = std:: int_least8_t;
@@ -87,6 +91,7 @@ public:
     void Decode();
     void Execute();
     void Memory();
+    bool WriteBack(); 
 
     // return different stages of the pipeline for debugging
     FetchOut& DebugFetchOut();
@@ -243,7 +248,9 @@ i64  Machine::GetXReg(i32 which) const
 void Machine::SetXReg(i32 which, i64 value)
 {
     which &= 0x1f; // Make sure the register number is 0 - 31
-    _regs[which] = value;
+    // do nothing if writing to zero register
+    if (which != 0)
+        _regs[which] = value;
 }
 
 void Machine::Fetch()
@@ -311,22 +318,22 @@ void Machine::Execute()
         cmd = SUB; 
         break;
 
-    case AUIPC: // AUIPC
-        opLeft = _pc;
-        cmd = ADD; 
-        break;
-    
     case JALR: // JALR
         // offset and a register value need to be added together
         cmd = ADD;
         break; 
     
-    case JAL:
+    case JAL: // JAL
         opLeft = _pc;
         cmd = ADD;
         break;
 
-    case LUI:
+    case AUIPC: // AUIPC
+        opLeft = _pc;
+        cmd = ADD; 
+        break;
+
+    case LUI: // LUI
         cmd = ADD;
         break;
 
@@ -574,6 +581,70 @@ void Machine::Memory()
         // the ALU result.
         _MO.value = _EO.result;
     }
+}
+bool Machine::WriteBack()
+{
+// (1) write a result to the RD register 
+    // non rd instructions have their rd set to 0
+    // SetXReg automatically restores x0 to 0
+    if (_DO.op == JALR || _DO.op == JAL)
+        SetXReg(_DO.rd, GetPC()+4);
+    else
+        SetXReg(_DO.rd, _MO.value);
+
+// (2) offset the program counter (+4 for all instructions except BRANCH, JAL, and JALR) 
+    switch (_DO.op)
+    {
+    case JALR:
+    case JAL:
+        // new pc calculate in execute
+        SetPC(_MO.value);
+        break;
+    case BRANCH:
+        switch (_DO.funct3)
+        {
+        case 0b000: // BEQ
+            if (_EO.z == 1) 
+                SetPC(GetPC() + _DO.offset);
+            break;
+        case 0b001: // BNE
+            if (_EO.z == 0)
+                SetPC(GetPC() + _DO.offset);
+            break;
+        case 0b100: // BLT
+            if (_EO.n == 1)
+                SetPC(GetPC() + _DO.offset);
+            break;
+        case 0b101: // BGE
+            if (_EO.n == 0)
+                SetPC(GetPC() + _DO.offset);
+            break;
+        }
+    default:
+        SetPC(GetPC()+4);
+    }
+
+// (3) talk to the operating system (for SYSTEM instructions)
+    // return true to go to next instruction
+    // return false to quit program
+    // check if there are any environment calls
+    if (_DO.op == SYSTEM)
+    {
+        // look a the a7 register (x17)
+        switch (GetXReg(17))
+        {
+        case 0: // quit the program
+            return false; 
+        case 1: // getchar
+            SetXReg(10, getchar() & 0xff); // store a char in reg a0 (x10)
+            break;
+        case 2: // putchar
+            putchar(static_cast<char>(GetXReg(10)));
+            break;
+        }
+    }
+    
+    return true; // go to next instruction
 }
 
 Machine::FetchOut& Machine::DebugFetchOut()
@@ -823,7 +894,9 @@ int main(int argc, char* argv[])
         std::cout << coolMachine.DebugExecuteOut() << '\n';
         coolMachine.Memory();
         std::cout << coolMachine.DebugMemoryOut() << '\n';
-        coolMachine.SetPC(coolMachine.GetPC() + 4);
+        if (!coolMachine.WriteBack())
+            break;
+        // coolMachine.SetPC(coolMachine.GetPC() + 4); // do this in writeback()
         // std::cout << '\n';
     }
 
