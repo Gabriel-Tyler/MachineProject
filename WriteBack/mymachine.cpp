@@ -783,6 +783,7 @@ Machine::ExecuteOut Machine::ALU(Machine::Alu cmd, i64 left, i64 right) const
     switch (cmd) 
     {
     case NO_OP:
+        ret.result = 0;
         break;
     case ADD:
         ret.result = left + right;
@@ -883,20 +884,21 @@ int main(int argc, char* argv[])
     fin.close();
 
     // create the Machine using the allocated memory and debug
-    Machine coolMachine(memory, MEM_SIZE);
-    while (coolMachine.GetPC() < fileSize)
+    Machine mach(memory, MEM_SIZE);
+    while (mach.GetPC() < fileSize)
     {
-        coolMachine.Fetch();
-        std::cout << coolMachine.DebugFetchOut() << '\n';
-        coolMachine.Decode();
-        std::cout << coolMachine.DebugDecodeOut() << '\n';
-        coolMachine.Execute();
-        std::cout << coolMachine.DebugExecuteOut() << '\n';
-        coolMachine.Memory();
-        std::cout << coolMachine.DebugMemoryOut() << '\n';
-        if (!coolMachine.WriteBack())
-            break;
-        // coolMachine.SetPC(coolMachine.GetPC() + 4); // do this in writeback()
+        std::cout << "PC = " << mach.GetPC() << '\n';
+        mach.Fetch();
+        std::cout << mach.DebugFetchOut() << '\n';
+        mach.Decode();
+        std::cout << mach.DebugDecodeOut() << '\n';
+        mach.Execute();
+        std::cout << mach.DebugExecuteOut() << '\n';
+        mach.Memory();
+        std::cout << mach.DebugMemoryOut() << '\n';
+        // if (!mach.WriteBack())
+            // break;
+        mach.SetPC(mach.GetPC() + 4); // do this in writeback()
         // std::cout << '\n';
     }
 

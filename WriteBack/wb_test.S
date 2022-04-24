@@ -8,7 +8,6 @@ _start:
 	ecall
 
 
-
 print:
 	mv	t0, a0
 	li	a7, 2
