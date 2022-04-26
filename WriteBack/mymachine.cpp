@@ -643,7 +643,6 @@ bool Machine::WriteBack()
             break;
         }
     }
-    
     return true; // go to next instruction
 }
 
@@ -769,10 +768,10 @@ void Machine::DecodeJ()
     _DO.funct7 = 0;
     _DO.offset = 0ll;
     _DO.leftVal  = 0ll;
-    _DO.rightVal = SignExtend((((_FO.instruction >> 31) & 1) << 19) | 
-                                ((_FO.instruction >> 21) & 0x3ff)    |
-                               (((_FO.instruction >> 20) & 1) << 10) |
-                               (((_FO.instruction >> 12) & 0xff) << 11), 19u);
+    _DO.rightVal = SignExtend((((_FO.instruction >> 31) & 1)     << 20) | 
+                              (((_FO.instruction >> 21) & 0x3ff) << 1)  |
+                              (((_FO.instruction >> 20) & 1)     << 11) |
+                              (((_FO.instruction >> 12) & 0xff)  << 12), 20u);
 }
 
 Machine::ExecuteOut Machine::ALU(Machine::Alu cmd, i64 left, i64 right) const
@@ -887,18 +886,18 @@ int main(int argc, char* argv[])
     Machine mach(memory, MEM_SIZE);
     while (mach.GetPC() < fileSize)
     {
-        std::cout << "PC = " << mach.GetPC() << '\n';
+        // std::cout << "PC = " << mach.GetPC() << '\n';
         mach.Fetch();
-        std::cout << mach.DebugFetchOut() << '\n';
+        // std::cout << mach.DebugFetchOut() << '\n';
         mach.Decode();
-        std::cout << mach.DebugDecodeOut() << '\n';
+        // std::cout << mach.DebugDecodeOut() << '\n';
         mach.Execute();
-        std::cout << mach.DebugExecuteOut() << '\n';
+        // std::cout << mach.DebugExecuteOut() << '\n';
         mach.Memory();
-        std::cout << mach.DebugMemoryOut() << '\n';
-        // if (!mach.WriteBack())
-            // break;
-        mach.SetPC(mach.GetPC() + 4); // do this in writeback()
+        // std::cout << mach.DebugMemoryOut() << '\n';
+        if (!mach.WriteBack())
+            break;
+        // mach.SetPC(mach.GetPC() + 4); // do this in writeback()
         // std::cout << '\n';
     }
 
