@@ -218,7 +218,7 @@ std::ostream& operator<<(std::ostream& out, const Machine::ExecuteOut& eo)
 std::ostream& operator<<(std::ostream& out, const Machine::MemoryOut& mo) 
 {
     std::ostringstream sout;
-    sout << "0x" << std::hex << std::right << std::setfill('0') << std::setw(16) << mo.value;
+    sout << "Memory: 0x" << std::hex << std::right << std::setfill('0') << std::setw(16) << mo.value;
     return out << sout.str();
 }
 
@@ -248,9 +248,8 @@ i64  Machine::GetXReg(i32 which) const
 void Machine::SetXReg(i32 which, i64 value)
 {
     which &= 0x1f; // Make sure the register number is 0 - 31
-    // do nothing if writing to zero register
-    if (which != 0)
-        _regs[which] = value;
+    _regs[which] = value;
+    _regs[0] = 0; // make sure zero is 0
 }
 
 void Machine::Fetch()
@@ -585,12 +584,12 @@ void Machine::Memory()
 bool Machine::WriteBack()
 {
 // (1) write a result to the RD register 
-    // non rd instructions have their rd set to 0
     // SetXReg automatically restores x0 to 0
     if (_DO.op == JALR || _DO.op == JAL)
         SetXReg(_DO.rd, GetPC()+4);
     else
         SetXReg(_DO.rd, _MO.value);
+    // std::cout << "Writeback: " << (int)_DO.rd << " = " << GetXReg(_DO.rd) << '\n';
 
 // (2) offset the program counter (+4 for all instructions except BRANCH, JAL, and JALR) 
     switch (_DO.op)
@@ -601,26 +600,17 @@ bool Machine::WriteBack()
         SetPC(_MO.value);
         break;
     case BRANCH:
-        switch (_DO.funct3)
-        {
-        case 0b000: // BEQ
-            if (_EO.z == 1) 
-                SetPC(GetPC() + _DO.offset);
-            break;
-        case 0b001: // BNE
-            if (_EO.z == 0)
-                SetPC(GetPC() + _DO.offset);
-            break;
-        case 0b100: // BLT
-            if (_EO.n == 1)
-                SetPC(GetPC() + _DO.offset);
-            break;
-        case 0b101: // BGE
-            if (_EO.n == 0)
-                SetPC(GetPC() + _DO.offset);
-            break;
-        }
+        // add offset to pc if condition is true, other wise add 4
+        if ((_DO.funct3 == 0b000 && _EO.z == 1) || // BEQ
+            (_DO.funct3 == 0b001 && _EO.z == 0) || // BNE
+            (_DO.funct3 == 0b100 && _EO.n == 1) || // BLT
+            (_DO.funct3 == 0b101 && _EO.n == 0))   // BGE
+            SetPC(GetPC() + _DO.offset);
+        else   
+            SetPC(GetPC()+4);
+        break;
     default:
+        // every other instruction
         SetPC(GetPC()+4);
     }
 
@@ -748,7 +738,7 @@ void Machine::DecodeB()
     _DO.offset = SignExtend((((_FO.instruction >> 31) & 1) << 12)   |
                             (((_FO.instruction >> 25) & 0x3f) << 5) |
                             (((_FO.instruction >> 8)  & 0xf) << 1)  | 
-                            (((_FO.instruction >> 7)  & 1) << 11), 11u);
+                            (((_FO.instruction >> 7)  & 1) << 11), 12u);
     _DO.leftVal  = GetXReg(_FO.instruction >> 15); // get_xreg truncates for us
     _DO.rightVal = GetXReg(_FO.instruction >> 20);
 }
@@ -858,7 +848,7 @@ int main(int argc, char* argv[])
     // get size of file by pointing to end and getting position
     fin.seekg(0, fin.end);
     int fileSize = fin.tellg();
-    std::cout << "fileSize = " << fileSize << '\n';
+    // std::cout << "fileSize = " << fileSize << '\n';
 
     // make sure the file size doesn't exceed the memory size
     if (fileSize > MEM_SIZE)
