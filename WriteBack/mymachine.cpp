@@ -1,18 +1,15 @@
 // Gabriel Tyler
-// 04/20/22
+// 04/25/22
 // Machine Project: WriteBack
 // Read from a binary file and store intructions in memory allocated on the heap
-// The Machine class goes through the instruction pipeline based on the stored instructions
+// The Machine class goes through the instruction pipeline
 
 #include <cstdint> // [u]int_leastN_t
-#include <cstdio>
+#include <cstdio>  // putchar, getchar
 #include <fstream> // ifstream
 #include <iomanip> 
 #include <iostream> 
 #include <sstream> // ostringstream
-
-// what instructions do nothing in Execute? comments
-// what is happening for each instruction in execute
 
 using u8  = std::uint_least8_t;
 using i8  = std:: int_least8_t;
@@ -515,8 +512,6 @@ void Machine::Execute()
 }
 void Machine::Memory() 
 {
-    // _MO.value = 0ll; // maybe reset the value in case there is no load
-
     // out of bounds checks are done inside of MemoryWrite and MemoryRead
 
     // Read or Write based on the Opcode
@@ -705,7 +700,7 @@ i64 Machine::SignExtend(u64 value, u32 index) const
 void Machine::DecodeR()
 {
     _DO.rd     = (_FO.instruction >> 7)  & 0x1f;
-    _DO.funct3 = (_FO.instruction >> 12) & 0b111;
+    _DO.funct3 = (_FO.instruction >> 12) & 0x7;
     _DO.funct7 = (_FO.instruction >> 25) & 0x3f;
     _DO.offset = 0ll;
     _DO.leftVal  = GetXReg(_FO.instruction >> 15);
@@ -714,7 +709,7 @@ void Machine::DecodeR()
 void Machine::DecodeI()
 {
     _DO.rd     = (_FO.instruction >> 7)  & 0x1f;
-    _DO.funct3 = (_FO.instruction >> 12) & 0b111;
+    _DO.funct3 = (_FO.instruction >> 12) & 0x7;
     _DO.funct7 = 0;
     _DO.offset = 0ll;
     _DO.leftVal  = GetXReg(_FO.instruction >> 15);
@@ -723,7 +718,7 @@ void Machine::DecodeI()
 void Machine::DecodeS()
 {
     _DO.rd     = 0;
-    _DO.funct3 = (_FO.instruction >> 12) & 0b111;
+    _DO.funct3 = (_FO.instruction >> 12) & 0x7;
     _DO.funct7 = 0;
     _DO.offset = SignExtend(((_FO.instruction >> 7)  & 0x1f) |
                            (((_FO.instruction >> 25) & 0x7f) << 5), 11u);
@@ -733,12 +728,12 @@ void Machine::DecodeS()
 void Machine::DecodeB()
 {
     _DO.rd     = 0;
-    _DO.funct3 = (_FO.instruction >> 12) & 0b111;
+    _DO.funct3 = (_FO.instruction >> 12) & 0x7;
     _DO.funct7 = 0;
-    _DO.offset = SignExtend((((_FO.instruction >> 31) & 1) << 12)   |
-                            (((_FO.instruction >> 25) & 0x3f) << 5) |
-                            (((_FO.instruction >> 8)  & 0xf) << 1)  | 
-                            (((_FO.instruction >> 7)  & 1) << 11), 12u);
+    _DO.offset = SignExtend((((_FO.instruction >> 31) & 1)    << 12) |
+                            (((_FO.instruction >> 25) & 0x3f) << 5)  |
+                            (((_FO.instruction >> 8)  & 0xf)  << 1)  | 
+                            (((_FO.instruction >> 7)  & 1)    << 11), 12u);
     _DO.leftVal  = GetXReg(_FO.instruction >> 15); // get_xreg truncates for us
     _DO.rightVal = GetXReg(_FO.instruction >> 20);
 }
@@ -769,6 +764,7 @@ Machine::ExecuteOut Machine::ALU(Machine::Alu cmd, i64 left, i64 right) const
     ExecuteOut ret;
 
     // perform the appropriate operation 
+    // store in ExecuteOut
     switch (cmd) 
     {
     case NO_OP:
@@ -876,6 +872,7 @@ int main(int argc, char* argv[])
     Machine mach(memory, MEM_SIZE);
     while (mach.GetPC() < fileSize)
     {
+        // uncomment for debug
         // std::cout << "PC = " << mach.GetPC() << '\n';
         mach.Fetch();
         // std::cout << mach.DebugFetchOut() << '\n';
@@ -887,7 +884,6 @@ int main(int argc, char* argv[])
         // std::cout << mach.DebugMemoryOut() << '\n';
         if (!mach.WriteBack())
             break;
-        // mach.SetPC(mach.GetPC() + 4); // do this in writeback()
         // std::cout << '\n';
     }
 
